@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* Paksa tampilan light (ngurangi efek theme browser/system) */
+:root {
+  color-scheme: light;
+}
+
+/* Reset ringan */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
