@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import { supabase } from "../lib/supabase";
+
 
 export default function AdminRegisterPage() {
   const nav = useNavigate();
@@ -24,13 +26,22 @@ export default function AdminRegisterPage() {
 
   const canSubmit = Object.keys(errors).length === 0;
 
-  function onSubmit(e) {
+  async function onSubmit(e) {
     e.preventDefault();
     if (!canSubmit) return;
-    // nanti connect ke Supabase Auth / API
-    alert("Register clicked (UI dulu).");
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name, phone } }, // simpan metadata admin
+    });
+
+    if (error) return alert(error.message);
+
+    alert("Register berhasil. Cek email jika diminta verifikasi.");
     nav("/admin/login");
   }
+
 
   return (
     <AppShell title="Register Admin">

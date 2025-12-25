@@ -1,64 +1,111 @@
 import { useState } from "react";
 import AppShell from "../components/AppShell";
+import { supabase } from "../lib/supabase";
 
 export default function CheckStatusPage() {
-  const [ticket, setTicket] = useState("");
-  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  const handleCheck = async () => {
+    if (!code) return;
+
+    setLoading(true);
+    setError("");
+    setData(null);
+
+    const { data, error } = await supabase
+      .from("submissions")
+      .select(
+        "module_slug,title,content,status,admin_reply,created_at"
+      )
+      .eq("tracking_code", code)
+      .single();
+
+    if (error) {
+      setError("Kode tidak ditemukan atau belum diproses");
+    } else {
+      setData(data);
+    }
+
+    setLoading(false);
+  };
+
+  const statusColor = {
+    pending: "bg-yellow-100 text-yellow-700",
+    diproses: "bg-blue-100 text-blue-700",
+    selesai: "bg-green-100 text-green-700",
+  };
 
   return (
-    <AppShell title="Cek Status">
-      <section className="rounded-3xl border bg-white p-4">
-        <p className="text-sm font-semibold">Masukkan Ticket</p>
-        <p className="mt-1 text-xs text-gray-500">
-          Gunakan ticket_id yang kamu dapat setelah submit.
+    <AppShell title="Cek Status Pengajuan">
+      {/* Input */}
+      <section className="rounded-3xl bg-blue-900 p-5 text-white">
+        <p className="text-sm font-semibold">
+          Masukkan Kode Pengajuan
+        </p>
+        <p className="mt-1 text-xs text-white/70">
+          Kode ini kamu dapat setelah mengirim pengajuan
         </p>
 
-        <div className="mt-4 space-y-3">
-          <label className="block">
-            <span className="text-xs text-gray-600">Ticket ID</span>
-            <div className="mt-1 flex items-center gap-2 rounded-2xl border bg-gray-50 px-3 py-2">
-              <i className="fa-solid fa-ticket text-gray-400"></i>
-              <input
-                className="w-full bg-transparent outline-none text-sm"
-                placeholder="Contoh: KEL-20251220-123456"
-                value={ticket}
-                onChange={(e) => setTicket(e.target.value)}
-              />
-            </div>
-          </label>
-
-          <label className="block">
-            <span className="text-xs text-gray-600">Email (opsional)</span>
-            <div className="mt-1 flex items-center gap-2 rounded-2xl border bg-gray-50 px-3 py-2">
-              <i className="fa-solid fa-envelope text-gray-400"></i>
-              <input
-                className="w-full bg-transparent outline-none text-sm"
-                placeholder="nama@kampus.ac.id"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-          </label>
-
-          <button className="w-full rounded-2xl bg-black py-3 text-sm font-semibold text-white active:scale-[0.99] transition">
-            <i className="fa-solid fa-magnifying-glass mr-2"></i>
-            Cek Status
+        <div className="mt-4 flex gap-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Contoh: ABC123XYZ"
+            className="flex-1 rounded-2xl px-4 py-3 text-black text-sm outline-none"
+          />
+          <button
+            onClick={handleCheck}
+            disabled={loading}
+            className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-blue-900 disabled:opacity-50"
+          >
+            {loading ? "Cek..." : "Cek"}
           </button>
         </div>
       </section>
 
-      {/* Placeholder status card */}
-      <section className="mt-4 rounded-3xl border bg-white p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Status Pengajuan</p>
-          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs">
-            <i className="fa-solid fa-clock"></i> DIAJUKAN
-          </span>
+      {/* Error */}
+      {error && (
+        <div className="mt-4 rounded-2xl bg-red-100 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
-        <p className="mt-2 text-xs text-gray-600">
-          Setelah kamu klik cek, di sini akan muncul detail pengajuan & balasan admin.
-        </p>
-      </section>
+      )}
+
+      {/* Result */}
+      {data && (
+        <section className="mt-4 rounded-3xl bg-white p-4 shadow">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">{data.title}</p>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                statusColor[data.status] || "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {data.status}
+            </span>
+          </div>
+
+          <p className="mt-2 text-xs text-gray-500">
+            Modul: {data.module_slug}
+          </p>
+
+          <p className="mt-3 text-sm text-gray-700 whitespace-pre-line">
+            {data.content}
+          </p>
+
+          {/* Admin Reply */}
+          {data.admin_reply && (
+            <div className="mt-4 rounded-2xl bg-green-50 p-3 text-sm text-green-800">
+              <p className="font-semibold">Balasan Admin</p>
+              <p className="mt-1 whitespace-pre-line">
+                {data.admin_reply}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
     </AppShell>
   );
 }

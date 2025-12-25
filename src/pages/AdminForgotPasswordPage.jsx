@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import { supabase } from "../lib/supabase";
+
 
 export default function AdminForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  
 
   const emailError = useMemo(() => {
     if (!email) return "Email wajib diisi";
@@ -12,14 +15,21 @@ export default function AdminForgotPasswordPage() {
     return "";
   }, [email]);
 
-  function onSubmit(e) {
+  async function onSubmit(e) {
     e.preventDefault();
     if (emailError) return;
 
-    // Nanti: panggil Supabase reset password
-    // Untuk sekarang UI dulu:
+    const redirectTo = `${window.location.origin}/admin/reset`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+
+    if (error) return alert(error.message);
+
     setSent(true);
   }
+
 
   return (
     <AppShell title="Lupa Password">

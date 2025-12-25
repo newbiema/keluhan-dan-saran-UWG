@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import { supabase } from "../lib/supabase";
+
 
 export default function AdminChangePasswordPage() {
   const [currentPw, setCurrentPw] = useState("");
@@ -21,14 +23,16 @@ export default function AdminChangePasswordPage() {
 
   const canSubmit = Object.keys(errors).length === 0 && newPw && confirmPw;
 
-  function onSubmit(e) {
+  async function onSubmit(e) {
     e.preventDefault();
     if (!canSubmit) return;
 
-    // Nanti: panggil Supabase updateUser({ password: newPw })
-    // UI dulu:
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    if (error) return alert(error.message);
+
     setDone(true);
   }
+
 
   return (
     <AppShell title="Ganti Password">
