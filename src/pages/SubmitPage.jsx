@@ -1,7 +1,16 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import AppShell from "../components/AppShell";
-import { supabase } from "../lib/supabase"; // pastikan sudah ada
+import { supabase } from "../lib/supabase";
+
+// helper generate kode
+function generateCode(slug) {
+  return (
+    slug.slice(0, 3).toUpperCase() +
+    "-" +
+    Math.random().toString(36).substring(2, 8).toUpperCase()
+  );
+}
 
 export default function SubmitPage() {
   const { slug } = useParams();
@@ -12,60 +21,66 @@ export default function SubmitPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
-  const [successCode, setSuccessCode] = useState(null);
-  const [error, setError] = useState(null);
+  const [ticket, setTicket] = useState(null);
 
-  async function handleSubmit(e) {
+  async function submit(e) {
     e.preventDefault();
-    setError(null);
-
-    if (!title || !content) {
-      setError("Judul dan isi wajib diisi");
-      return;
-    }
+    if (!name || !title || !content) return;
 
     setLoading(true);
 
-    const trackingCode = `LPR-${Date.now().toString().slice(-6)}`;
+    const tracking_code = generateCode(slug);
 
     const { error } = await supabase.from("submissions").insert({
       module_slug: slug,
       title,
       content,
-      sender_name: name || null,
-      sender_contact: contact || null,
-      tracking_code: trackingCode,
+      sender_name: name,
+      sender_contact: contact,
+      tracking_code,
       status: "pending",
     });
 
     setLoading(false);
 
     if (error) {
-      setError("Gagal mengirim pengajuan");
-      console.error(error);
+      alert(error.message);
       return;
     }
 
-    setSuccessCode(trackingCode);
+    // simpan tiket ke localStorage
+    const saved = JSON.parse(localStorage.getItem("tickets") || "[]");
+    saved.unshift({
+      tracking_code,
+      title,
+      module_slug: slug,
+      created_at: new Date().toISOString(),
+    });
+    localStorage.setItem("tickets", JSON.stringify(saved.slice(0, 5)));
+
+    setTicket(tracking_code);
   }
 
-  if (successCode) {
+  // ===== SUCCESS SCREEN =====
+  if (ticket) {
     return (
       <AppShell title="Pengajuan Terkirim">
-        <section className="rounded-3xl bg-blue-900 text-white p-5 text-center">
-          <i className="fa-solid fa-circle-check text-3xl mb-3"></i>
-          <p className="text-lg font-semibold">Berhasil dikirim</p>
+        <section className="rounded-3xl bg-green-600 p-5 text-white">
+          <p className="text-sm font-semibold">Pengajuan berhasil dikirim 🎉</p>
           <p className="mt-1 text-xs text-white/80">
-            Simpan kode berikut untuk cek status
+            Simpan kode ini untuk cek status
           </p>
 
-          <div className="mt-4 rounded-2xl bg-white text-blue-900 py-3 font-mono font-bold text-lg">
-            {successCode}
+          <div className="mt-4 rounded-2xl bg-white text-green-700 px-4 py-3 text-center">
+            <p className="text-xs">Kode Pengajuan</p>
+            <p className="text-lg font-bold tracking-widest">
+              {ticket}
+            </p>
           </div>
 
           <button
             onClick={() => navigate("/cek-status")}
-            className="mt-5 w-full rounded-2xl bg-white text-blue-900 py-3 text-sm font-semibold"
+            className="mt-4 w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-green-700"
           >
             Cek Status Pengajuan
           </button>
@@ -74,83 +89,62 @@ export default function SubmitPage() {
     );
   }
 
+  // ===== FORM =====
   return (
-    <AppShell title="Form Pengajuan">
+    <AppShell title="Ajukan Pengajuan">
       <form
-        onSubmit={handleSubmit}
-        className="space-y-4"
+        onSubmit={submit}
+        className="space-y-4 rounded-3xl bg-white p-4 border"
       >
-        {/* ===== INFO ===== */}
-        <section className="rounded-3xl bg-blue-50 border border-blue-100 p-4">
-          <p className="text-sm font-semibold text-blue-900">
-            Pengajuan anonim
-          </p>
-          <p className="text-xs text-blue-800 mt-1">
-            Kamu boleh mengosongkan nama & kontak
-          </p>
-        </section>
-
-        {/* ===== NAMA ===== */}
         <div>
-          <label className="text-xs text-gray-600">Nama (opsional)</label>
+          <label className="text-xs text-gray-500">Nama</label>
           <input
-            type="text"
-            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-2xl border px-4 py-3 text-sm"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nama kamu"
+            required
           />
         </div>
 
-        {/* ===== KONTAK ===== */}
         <div>
-          <label className="text-xs text-gray-600">
-            Kontak (Email / WA, opsional)
+          <label className="text-xs text-gray-500">
+            Kontak (Email / WA)
           </label>
           <input
-            type="text"
-            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-2xl border px-4 py-3 text-sm"
             value={contact}
             onChange={(e) => setContact(e.target.value)}
-            placeholder="email@kampus.ac.id"
+            placeholder="Opsional"
           />
         </div>
 
-        {/* ===== JUDUL ===== */}
         <div>
-          <label className="text-xs text-gray-600">Judul *</label>
+          <label className="text-xs text-gray-500">Judul</label>
           <input
-            type="text"
-            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-2xl border px-4 py-3 text-sm"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            placeholder="Judul singkat"
             required
-            placeholder="Ringkasan keluhan / saran"
           />
         </div>
 
-        {/* ===== ISI ===== */}
         <div>
-          <label className="text-xs text-gray-600">Isi pengajuan *</label>
+          <label className="text-xs text-gray-500">Isi Pengajuan</label>
           <textarea
-            rows="5"
-            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+            rows={5}
+            className="mt-1 w-full rounded-2xl border px-4 py-3 text-sm"
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            placeholder="Jelaskan keluhan / saran kamu"
             required
-            placeholder="Jelaskan secara detail..."
           />
         </div>
 
-        {error && (
-          <p className="text-xs text-red-600">{error}</p>
-        )}
-
-        {/* ===== SUBMIT ===== */}
         <button
-          type="submit"
           disabled={loading}
-          className="w-full rounded-2xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+          className="w-full rounded-2xl bg-blue-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
         >
           {loading ? "Mengirim..." : "Kirim Pengajuan"}
         </button>

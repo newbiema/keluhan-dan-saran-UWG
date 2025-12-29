@@ -4,27 +4,44 @@ import { supabase } from "../lib/supabase";
 
 export default function RequireAdmin() {
   const [loading, setLoading] = useState(true);
-  const [authed, setAuthed] = useState(false);
+  const [allowed, setAllowed] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
     let mounted = true;
 
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setAuthed(!!data?.session);
-      setLoading(false);
-    };
+    async function checkAdmin() {
+      // 1️⃣ cek session
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData?.session;
 
-    checkSession();
+      if (!session) {
+        if (mounted) {
+          setAllowed(false);
+          setLoading(false);
+        }
+        return;
+      }
 
-    const { data: sub } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setAuthed(!!session);
+      // 2️⃣ cek admin_profiles
+      const { data: profile } = await supabase
+        .from("admin_profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      if (mounted) {
+        setAllowed(!!profile); // hanya admin terdaftar
         setLoading(false);
       }
-    );
+    }
+
+    checkAdmin();
+
+    // optional: listen auth change
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      checkAdmin();
+    });
 
     return () => {
       mounted = false;
@@ -32,26 +49,26 @@ export default function RequireAdmin() {
     };
   }, []);
 
-  // ===== LOADING STATE =====
+  // ===== LOADING =====
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
-        Checking admin session...
+        Checking admin access…
       </div>
     );
   }
 
-  // ===== NOT AUTHENTICATED =====
-  if (!authed) {
+  // ===== NOT ADMIN =====
+  if (!allowed) {
     return (
       <Navigate
         to="/admin/login"
-        state={{ from: location.pathname }}
         replace
+        state={{ from: location.pathname }}
       />
     );
   }
 
-  // ===== AUTHENTICATED =====
+  // ===== OK =====
   return <Outlet />;
 }

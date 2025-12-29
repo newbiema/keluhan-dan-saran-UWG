@@ -20,6 +20,8 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import DashboardPage from "./pages/admin/DashboardPage";
 import SubmissionDetailPage from "./pages/admin/SubmissionDetailPage";
 
+import AdminManagementPage from "./pages/admin/AdminManagementPage";
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -45,8 +47,13 @@ export default function App() {
           <Route element={<AdminLayout />}>
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="submissions/:id" element={<SubmissionDetailPage />} />
+            <Route path="/admin/manage-admin" element={<AdminManagementPage />} />
+
           </Route>
         </Route>
+
+        
+
 
         {/* ================= FALLBACK ================= */}
         <Route path="*" element={<Navigate to="/" replace />} />

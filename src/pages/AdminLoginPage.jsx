@@ -95,9 +95,9 @@ export default function AdminLoginPage() {
             <Link to="/admin/forgot" className="text-gray-600 underline underline-offset-4">
               Lupa password?
             </Link>
-            <Link to="/admin/register" className="text-gray-900 font-semibold underline underline-offset-4">
+            {/* <Link to="/admin/register" className="text-gray-900 font-semibold underline underline-offset-4">
               Register admin
-            </Link>
+            </Link> */}
           </div>
         </form>
       </section>
