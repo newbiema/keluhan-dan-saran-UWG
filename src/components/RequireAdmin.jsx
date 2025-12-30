@@ -34,6 +34,7 @@ export default function RequireAdmin() {
         setAllowed(!!profile); // hanya admin terdaftar
         setLoading(false);
       }
+      
     }
 
     checkAdmin();

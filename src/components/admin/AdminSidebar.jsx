@@ -1,8 +1,29 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 export default function AdminSidebar() {
   const navigate = useNavigate();
+  const [role, setRole] = useState(null);
+
+  // ===== LOAD ROLE =====
+  useEffect(() => {
+    const loadRole = async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const user = session?.session?.user;
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("admin_profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      setRole(data?.role);
+    };
+
+    loadRole();
+  }, []);
 
   async function logout() {
     await supabase.auth.signOut();
@@ -35,10 +56,16 @@ export default function AdminSidebar() {
           <span>Dashboard</span>
         </NavLink>
 
-        <NavLink to="/admin/manage-admin" className={linkClass}>
-          <i className="fa-solid fa-users-gear text-sm"></i>
-          <span>Manajemen Admin</span>
-        </NavLink>
+        {/* ===== SUPER ADMIN ONLY ===== */}
+        {role === "super" && (
+          <NavLink
+            to="/admin/manage-admin"
+            className={linkClass}
+          >
+            <i className="fa-solid fa-users-gear text-sm"></i>
+            <span>Manajemen Admin</span>
+          </NavLink>
+        )}
       </nav>
 
       {/* ===== FOOTER ===== */}

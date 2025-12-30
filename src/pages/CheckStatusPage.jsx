@@ -1,17 +1,24 @@
 import { useEffect, useState } from "react";
 import AppShell from "../components/AppShell";
 import { supabase } from "../lib/supabase";
+import { toastError } from "../lib/toast";
 
 export default function CheckStatusPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const [autoLoaded, setAutoLoaded] = useState(false);
+  const [history, setHistory] = useState([]);
 
-  /* ================= FETCH STATUS ================= */
-  const fetchStatus = async (trackingCode) => {
-    if (!trackingCode) return;
+  /* ===== LOAD RIWAYAT (MAX 5) ===== */
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("tickets") || "[]");
+    setHistory(saved.slice(0, 5));
+  }, []);
+
+  const handleCheck = async (trackingCode) => {
+    const q = trackingCode || code;
+    if (!q) return;
 
     setLoading(true);
     setError("");
@@ -22,74 +29,81 @@ export default function CheckStatusPage() {
       .select(
         "module_slug,title,content,status,admin_reply,created_at"
       )
-      .eq("tracking_code", trackingCode)
+      .eq("tracking_code", q)
       .single();
 
-    if (error || !data) {
-      setError("Kode pengajuan tidak ditemukan.");
+    if (error) {
+      setError("Kode tidak ditemukan atau belum diproses");
+      toastError("Kode tidak ditemukan");
     } else {
       setData(data);
+      setCode(q);
     }
 
     setLoading(false);
   };
 
-  /* ================= AUTO LOAD LAST TICKET ================= */
-  useEffect(() => {
-    const saved = JSON.parse(
-      localStorage.getItem("tickets") || "[]"
-    );
-
-    if (saved.length > 0 && !autoLoaded) {
-      const last = saved[0];
-      setCode(last.tracking_code);
-      fetchStatus(last.tracking_code);
-      setAutoLoaded(true);
-    }
-  }, [autoLoaded]);
-
-  const statusMap = {
-    pending: {
-      label: "Menunggu",
-      color: "bg-yellow-100 text-yellow-700",
-    },
-    process: {
-      label: "Diproses",
-      color: "bg-blue-100 text-blue-700",
-    },
-    done: {
-      label: "Selesai",
-      color: "bg-green-100 text-green-700",
-    },
+  const statusColor = {
+    pending: "bg-yellow-100 text-yellow-700",
+    process: "bg-blue-100 text-blue-700",
+    done: "bg-green-100 text-green-700",
   };
 
   return (
     <AppShell title="Cek Status Pengajuan">
       {/* ===== INPUT ===== */}
       <section className="rounded-3xl bg-blue-900 p-5 text-white">
-        <p className="text-sm font-semibold">
-          Masukkan Kode Pengajuan
-        </p>
+        <p className="text-sm font-semibold">Masukkan Kode Pengajuan</p>
         <p className="mt-1 text-xs text-white/70">
-          Kode akan otomatis terisi jika kamu pernah mengirim pengajuan
+          Kode ini kamu dapat setelah mengirim pengajuan
         </p>
 
         <div className="mt-4 flex gap-2">
           <input
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            placeholder="Contoh: KEL-8F32A9"
-            className="flex-1 rounded-2xl px-4 py-3 text-sm text-black outline-none"
+            placeholder="Contoh: KEL-ABC123"
+            className="flex-1 rounded-2xl px-4 py-3 text-black text-sm outline-none"
           />
           <button
-            onClick={() => fetchStatus(code)}
+            onClick={() => handleCheck()}
             disabled={loading}
-            className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-blue-900 disabled:opacity-60"
+            className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-blue-900 disabled:opacity-50"
           >
             {loading ? "Cek..." : "Cek"}
           </button>
         </div>
       </section>
+
+      {/* ===== RIWAYAT ===== */}
+      {history.length > 0 && (
+        <section className="mt-4 rounded-3xl bg-white p-4 border">
+          <p className="text-sm font-semibold mb-3">
+            Riwayat Pengajuan Terakhir
+          </p>
+
+          <div className="space-y-2">
+            {history.map((h) => (
+              <button
+                key={h.tracking_code}
+                onClick={() => handleCheck(h.tracking_code)}
+                className="w-full flex items-center justify-between rounded-2xl border px-4 py-3 text-left hover:bg-gray-50"
+              >
+                <div>
+                  <p className="text-sm font-medium">
+                    {h.title}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {h.tracking_code}
+                  </p>
+                </div>
+
+                <i className="fa-solid fa-chevron-right text-gray-400"></i>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ===== ERROR ===== */}
       {error && (
@@ -100,58 +114,35 @@ export default function CheckStatusPage() {
 
       {/* ===== RESULT ===== */}
       {data && (
-        <section className="mt-4 rounded-3xl bg-white p-5 shadow space-y-4">
-          {/* Header */}
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-semibold">
-                {data.title}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Modul: {data.module_slug}
-              </p>
-            </div>
-
+        <section className="mt-4 rounded-3xl bg-white p-4 border">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">{data.title}</p>
             <span
               className={`rounded-full px-3 py-1 text-xs font-medium ${
-                statusMap[data.status]?.color ||
+                statusColor[data.status] ||
                 "bg-gray-100 text-gray-600"
               }`}
             >
-              {statusMap[data.status]?.label || data.status}
+              {data.status}
             </span>
           </div>
 
-          {/* Content */}
-          <div>
-            <p className="text-xs text-gray-500 mb-1">
-              Isi Pengajuan
-            </p>
-            <p className="text-sm text-gray-700 whitespace-pre-line">
-              {data.content}
-            </p>
-          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            Modul: {data.module_slug}
+          </p>
 
-          {/* Admin Reply */}
-          {data.admin_reply ? (
-            <div className="rounded-2xl bg-green-50 p-4 text-sm text-green-800">
-              <p className="font-semibold mb-1">
-                Balasan Admin
-              </p>
-              <p className="whitespace-pre-line">
+          <p className="mt-3 text-sm whitespace-pre-line">
+            {data.content}
+          </p>
+
+          {data.admin_reply && (
+            <div className="mt-4 rounded-2xl bg-green-50 p-3 text-sm text-green-800">
+              <p className="font-semibold">Balasan Admin</p>
+              <p className="mt-1 whitespace-pre-line">
                 {data.admin_reply}
               </p>
             </div>
-          ) : (
-            <div className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
-              Belum ada balasan dari admin.
-            </div>
           )}
-
-          <p className="text-xs text-gray-400">
-            Dikirim pada{" "}
-            {new Date(data.created_at).toLocaleString()}
-          </p>
         </section>
       )}
     </AppShell>
