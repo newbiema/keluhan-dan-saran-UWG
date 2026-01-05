@@ -9,38 +9,43 @@ export default function AdminManagementPage() {
   const [loading, setLoading] = useState(false);
   const [myRole, setMyRole] = useState(null);
 
-  /* ================= LOAD ADMIN LIST ================= */
-  async function loadAdmins() {
-    const { data } = await supabase
-      .from("admin_profiles")
-      .select("id,email,role,created_at")
-      .order("created_at", { ascending: false });
-
-    setAdmins(data || []);
-  }
-
-  /* ================= LOAD MY ROLE ================= */
+  /* ================= LOAD ROLE SAYA ================= */
   async function loadMyRole() {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     const { data } = await supabase
       .from("admin_profiles")
       .select("role")
-      .eq("id", userData.user.id)
+      .eq("id", user.id)
       .single();
 
     setMyRole(data?.role ?? null);
   }
 
+  /* ================= LOAD ADMIN (RLS-AWARE) ================= */
+  async function loadAdmins() {
+    const { data, error } = await supabase
+      .from("admin_profiles")
+      .select("id,email,role,is_completed,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setAdmins(data || []);
+  }
+
   useEffect(() => {
-    loadAdmins();
     loadMyRole();
+    loadAdmins();
   }, []);
 
-  /* ================= ADD ADMIN ================= */
+  /* ================= INVITE ADMIN ================= */
   async function addAdmin() {
-    if (!email) {
+    if (!email.trim()) {
       Swal.fire("Error", "Email wajib diisi", "error");
       return;
     }
@@ -48,94 +53,49 @@ export default function AdminManagementPage() {
     setLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        throw new Error("Session admin tidak ditemukan");
-      }
-
-      // Memanggil Edge Function
-      const { data, error } = await supabase.functions.invoke(
+      const { error } = await supabase.functions.invoke(
         "create-admin",
         {
-          body: { email, role },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
+          body: {
+            email: email.trim().toLowerCase(),
+            role,
           },
         }
       );
 
-      // Jika ada error dari pemanggilan fungsi (400, 401, 500)
-      if (error) {
-        // Supabase Edge Function biasanya mengembalikan error dalam bentuk JSON
-        // Kita coba ambil pesan error dari body jika tersedia
-        const errorMsg = error instanceof Error ? error.message : "Gagal memproses permintaan";
-        throw new Error(errorMsg);
-      }
+      if (error) throw error;
 
-      Swal.fire({
-        icon: "success",
-        title: "Berhasil",
-        text: "Undangan admin berhasil dikirim",
-      });
-
+      Swal.fire("Berhasil", "Undangan admin terkirim", "success");
       setEmail("");
       setRole("operator");
       loadAdmins();
     } catch (err) {
-      console.error(err);
       Swal.fire("Gagal", err.message, "error");
     } finally {
       setLoading(false);
     }
   }
-  /* ================= REMOVE ADMIN ================= */
-  async function removeAdmin(id) {
-    const confirm = await Swal.fire({
-      title: "Hapus admin?",
-      text: "Admin ini akan kehilangan akses dashboard",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Ya, hapus",
-    });
 
-    if (!confirm.isConfirmed) return;
-
-    await supabase.from("admin_profiles").delete().eq("id", id);
-
-    Swal.fire("Terhapus", "Admin berhasil dihapus", "success");
-    loadAdmins();
-  }
-
-  /* ================= RENDER ================= */
+  /* ================= UI ================= */
   return (
-    <div className="space-y-6 max-w-3xl">
-      {/* ===== HEADER ===== */}
-      <div>
-        <h1 className="text-xl font-bold">Manajemen Admin</h1>
-        <p className="text-sm text-muted-foreground">
-          Kelola akun admin sistem
-        </p>
-      </div>
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <h1 className="text-2xl font-bold">Manajemen Admin</h1>
 
-      {/* ===== ADD ADMIN (SUPER ONLY) ===== */}
+      {/* FORM INVITE (SUPER ONLY) */}
       {myRole === "super" && (
-        <div className="bg-white border rounded-lg p-4 space-y-4">
-          <p className="font-semibold text-sm">Tambah Admin</p>
-
+        <div className="bg-white border rounded p-4 space-y-3">
           <input
-            className="w-full border rounded px-3 py-2 text-sm"
+            type="email"
+            className="w-full border px-3 py-2"
             placeholder="Email admin"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
           />
 
           <select
-            className="w-full border rounded px-3 py-2 text-sm"
+            className="w-full border px-3 py-2"
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            disabled={loading}
           >
             <option value="operator">Operator</option>
             <option value="super">Super Admin</option>
@@ -144,65 +104,48 @@ export default function AdminManagementPage() {
           <button
             onClick={addAdmin}
             disabled={loading}
-            className="bg-blue-600 text-white rounded px-4 py-2 text-sm disabled:opacity-60"
+            className="bg-blue-600 text-white px-4 py-2 rounded"
           >
-            {loading ? "Mengirim undangan..." : "Tambah Admin"}
+            {loading ? "Mengirim..." : "Kirim Undangan"}
           </button>
         </div>
       )}
 
-      {/* ===== LIST ADMIN ===== */}
-      <div className="bg-white border rounded-lg overflow-hidden">
+      {/* LIST ADMIN */}
+      <div className="bg-white border rounded overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left">
+          <thead className="bg-gray-50">
             <tr>
-              <th className="p-3">Email</th>
-              <th className="p-3">Role</th>
-              <th className="p-3">Aksi</th>
+              <th className="p-3 text-left">Email</th>
+              <th className="p-3 text-left">Role</th>
+              <th className="p-3 text-left">Status</th>
             </tr>
           </thead>
-
           <tbody>
             {admins.map((a) => (
               <tr key={a.id} className="border-t">
                 <td className="p-3">{a.email}</td>
+                <td className="p-3 capitalize">{a.role}</td>
                 <td className="p-3">
-                  <span
-                    className={`text-xs px-2 py-1 rounded ${
-                      a.role === "super"
-                        ? "bg-purple-100 text-purple-700"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    {a.role}
-                  </span>
-                </td>
-
-                <td className="p-3">
-                  {myRole === "super" && a.role !== "super" ? (
-                    <button
-                      onClick={() => removeAdmin(a.id)}
-                      className="text-red-600 text-xs"
-                    >
-                      Hapus
-                    </button>
-                  ) : (
-                    <span className="text-xs text-gray-400">—</span>
-                  )}
+                  {a.is_completed ? "Aktif" : "Menunggu"}
                 </td>
               </tr>
             ))}
 
             {admins.length === 0 && (
               <tr>
-                <td colSpan="3" className="p-4 text-center text-gray-500">
-                  Belum ada admin
+                <td colSpan="3" className="p-4 text-center text-gray-400">
+                  Tidak ada data admin
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <p className="text-xs text-gray-400">
+        Login sebagai: <b>{myRole}</b>
+      </p>
     </div>
   );
 }

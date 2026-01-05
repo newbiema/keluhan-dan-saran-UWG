@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 
 
 export default function AdminChangePasswordPage() {
-  const [currentPw, setCurrentPw] = useState("");
+  const [currentPw, ] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -13,8 +13,6 @@ export default function AdminChangePasswordPage() {
 
   const errors = useMemo(() => {
     const e = {};
-    // current password opsional tergantung flow (kalau dari reset email, biasanya tidak perlu current)
-    // tapi kita tetap sediakan fieldnya biar fleksibel.
     if (newPw.length < 6) e.newPw = "Password baru minimal 6 karakter";
     if (confirmPw !== newPw) e.confirmPw = "Konfirmasi password tidak sama";
     if (newPw && currentPw && newPw === currentPw) e.newPw = "Password baru harus berbeda";
@@ -52,22 +50,6 @@ export default function AdminChangePasswordPage() {
 
           <form onSubmit={onSubmit} className="mt-4 space-y-3">
             {/* Current password (opsional) */}
-            <div>
-              <label className="text-xs text-gray-600">
-                Password Saat Ini <span className="text-gray-400">(opsional)</span>
-              </label>
-              <div className="mt-1 flex items-center gap-2 rounded-2xl border bg-gray-50 px-3 py-2">
-                <i className="fa-solid fa-lock text-gray-400"></i>
-                <input
-                  type={showPw ? "text" : "password"}
-                  className="w-full bg-transparent outline-none text-sm"
-                  placeholder="Isi kalau diminta"
-                  value={currentPw}
-                  onChange={(e) => setCurrentPw(e.target.value)}
-                  autoComplete="current-password"
-                />
-              </div>
-            </div>
 
             {/* New password */}
             <div>

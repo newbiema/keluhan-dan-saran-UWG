@@ -24,6 +24,8 @@ import DashboardPage from "./pages/admin/DashboardPage";
 import SubmissionDetailPage from "./pages/admin/SubmissionDetailPage";
 import AdminManagementPage from "./pages/admin/AdminManagementPage";
 
+
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -44,7 +46,7 @@ export default function App() {
 
         {/* ===== ADMIN INVITE FLOW ===== */}
         {/* Pastikan link di email Supabase diarahkan ke sini */}
-        <Route path="/admin/auth/callback" element={<AdminAuthCallbackPage />} />
+        <Route path="/admin/callback" element={<AdminAuthCallbackPage />} />
         <Route
           path="/admin/complete-profile"
           element={<AdminCompleteProfilePage />}

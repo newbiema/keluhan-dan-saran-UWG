@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useNavigate } from "react-router-dom";
-import StatusBadge from "../../components/admin/StatusBadge";
-import SubmissionTable from "../../components/admin/SubmissionTable";
-
 
 /* ===== CHART ===== */
 import {
@@ -25,27 +22,38 @@ export default function DashboardPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("all");
-  const [role, setRole] = useState("operator");
+  const [role, setRole] = useState(null);
 
-  /* ================= FETCH USER ROLE ================= */
+  /* ================= LOAD ROLE FROM admin_profiles ================= */
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setRole(data?.user?.user_metadata?.role || "operator");
-    });
+    async function loadRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("admin_profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      setRole(data?.role || "operator");
+    }
+
+    loadRole();
   }, []);
 
   /* ================= FETCH DATA ================= */
   const fetchData = async () => {
     setLoading(true);
 
-    let q = supabase
+    let query = supabase
       .from("submissions")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (status !== "all") q = q.eq("status", status);
+    if (status !== "all") query = query.eq("status", status);
 
-    const { data } = await q;
+    const { data } = await query;
     setData(data || []);
     setLoading(false);
   };
@@ -58,7 +66,7 @@ export default function DashboardPage() {
       .channel("submissions-realtime")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "submissions" },
+        { event: "*", schema: "public", table: "submissions" },
         fetchData
       )
       .subscribe();
@@ -68,9 +76,9 @@ export default function DashboardPage() {
 
   /* ================= DELETE ================= */
   const remove = async (id) => {
-    if (role !== "super") return alert("Tidak punya izin");
-    if (!confirm("Hapus pengajuan ini?")) return;
+    if (role !== "super") return;
 
+    if (!confirm("Hapus pengajuan ini?")) return;
     await supabase.from("submissions").delete().eq("id", id);
     fetchData();
   };

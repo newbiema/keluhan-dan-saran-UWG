@@ -24,6 +24,7 @@ export default function AdminResetCallbackPage() {
 
         setMsg("Berhasil. Silakan buat password baru.");
         nav("/admin/change-password", { replace: true });
+      // eslint-disable-next-line no-unused-vars
       } catch (e) {
         setMsg("Link reset tidak valid / sudah expired.");
       }

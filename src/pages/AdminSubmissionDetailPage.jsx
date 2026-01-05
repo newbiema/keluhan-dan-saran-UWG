@@ -31,7 +31,6 @@ export default function AdminSubmissionDetailPage() {
     setLoading(false);
   };
 
-  /* ================= EFFECT ================= */
   useEffect(() => {
     fetchDetail();
   }, [id]);
@@ -65,45 +64,75 @@ export default function AdminSubmissionDetailPage() {
 
   /* ================= UI ================= */
   if (loading) {
-    return <p className="p-6 text-sm text-gray-500">Memuat data...</p>;
+    return (
+      <div className="p-6 text-sm text-muted-foreground flex items-center gap-2">
+        <i className="fa-solid fa-spinner animate-spin"></i>
+        Memuat data...
+      </div>
+    );
   }
 
   if (!data) {
-    return <p className="p-6 text-sm text-red-500">Data tidak ditemukan</p>;
+    return (
+      <div className="p-6 text-sm text-red-600 flex items-center gap-2">
+        <i className="fa-solid fa-circle-xmark"></i>
+        Data tidak ditemukan
+      </div>
+    );
   }
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
-      {/* Header */}
+      {/* ===== HEADER ===== */}
       <div className="flex justify-between items-center">
-        <h1 className="text-lg font-bold">Detail Pengajuan</h1>
+        <h1 className="text-lg font-bold flex items-center gap-2">
+          <i className="fa-solid fa-file-lines text-blue-600"></i>
+          Detail Pengajuan
+        </h1>
+
         <button
           onClick={handleDelete}
-          className="text-sm text-red-600 hover:underline"
+          className="text-sm text-red-600 hover:underline flex items-center gap-1"
         >
+          <i className="fa-solid fa-trash"></i>
           Hapus
         </button>
       </div>
 
-      {/* Info */}
-      <div className="rounded-xl border p-4 space-y-2">
-        <p className="font-semibold">{data.title}</p>
-        <p className="text-sm text-gray-600">{data.description}</p>
+      {/* ===== INFO CARD ===== */}
+      <div className="rounded-xl border bg-white p-4 space-y-3">
+        <h2 className="font-semibold text-base flex items-center gap-2">
+          <i className="fa-solid fa-heading text-gray-400"></i>
+          {data.title}
+        </h2>
 
-        <div className="text-xs text-gray-500 mt-3">
-          <p>Modul: {data.module_slug}</p>
-          <p>Kode: {data.tracking_code}</p>
-          <p>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          {data.content}
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 text-xs text-gray-500 pt-2">
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-layer-group"></i>
+            Modul: {data.module_slug}
+          </div>
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-barcode"></i>
+            Kode: {data.tracking_code}
+          </div>
+          <div className="flex items-center gap-2 col-span-2">
+            <i className="fa-solid fa-clock"></i>
             Dibuat: {new Date(data.created_at).toLocaleString()}
-          </p>
+          </div>
         </div>
       </div>
 
-      {/* Status */}
+      {/* ===== STATUS ===== */}
       <div>
-        <label className="block text-sm font-medium mb-1">
-          Status
+        <label className="block text-sm font-medium mb-1 flex items-center gap-2">
+          <i className="fa-solid fa-flag"></i>
+          Status Pengajuan
         </label>
+
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -115,11 +144,13 @@ export default function AdminSubmissionDetailPage() {
         </select>
       </div>
 
-      {/* Reply */}
+      {/* ===== REPLY ===== */}
       <div>
-        <label className="block text-sm font-medium mb-1">
+        <label className="block text-sm font-medium mb-1 flex items-center gap-2">
+          <i className="fa-solid fa-reply"></i>
           Balasan Admin
         </label>
+
         <textarea
           value={reply}
           onChange={(e) => setReply(e.target.value)}
@@ -129,20 +160,22 @@ export default function AdminSubmissionDetailPage() {
         />
       </div>
 
-      {/* Actions */}
+      {/* ===== ACTIONS ===== */}
       <div className="flex gap-3">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50"
         >
+          <i className="fa-solid fa-floppy-disk"></i>
           {saving ? "Menyimpan..." : "Simpan"}
         </button>
 
         <button
           onClick={() => navigate(-1)}
-          className="border px-4 py-2 rounded-lg text-sm"
+          className="border px-4 py-2 rounded-lg text-sm flex items-center gap-2"
         >
+          <i className="fa-solid fa-arrow-left"></i>
           Kembali
         </button>
       </div>
