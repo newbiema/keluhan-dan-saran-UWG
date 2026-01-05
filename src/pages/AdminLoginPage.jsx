@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { supabase } from "../lib/supabase";
+import Swal from "sweetalert2";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -17,9 +18,46 @@ export default function AdminLoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     setLoading(false);
-    if (error) return alert(error.message);
+    
+    if (error) {
+      // SweetAlert untuk error login
+      Swal.fire({
+        icon: 'error',
+        title: 'Login Gagal',
+        text: getErrorMessage(error.message),
+        confirmButtonText: 'Coba Lagi',
+        confirmButtonColor: '#dc2626',
+        timer: 3000,
+        timerProgressBar: true,
+      });
+      return;
+    }
 
-    nav("/admin/dashboard");
+    // SweetAlert untuk success login
+    Swal.fire({
+      icon: 'success',
+      title: 'Login Berhasil!',
+      text: 'Selamat datang di dashboard admin',
+      showConfirmButton: false,
+      timer: 1500,
+      timerProgressBar: true,
+      didClose: () => {
+        nav("/admin/dashboard");
+      }
+    });
+  }
+
+  // Fungsi untuk mempercantik pesan error
+  function getErrorMessage(errorMsg) {
+    const messages = {
+      'Invalid login credentials': 'Email atau password salah',
+      'Email not confirmed': 'Email belum dikonfirmasi',
+      'User not found': 'Akun tidak ditemukan',
+      'Network error': 'Koneksi internet bermasalah',
+      'Too many requests': 'Terlalu banyak percobaan login. Coba lagi nanti',
+    };
+
+    return messages[errorMsg] || errorMsg || 'Terjadi kesalahan saat login';
   }
 
   const disabled = !email.trim() || password.length < 6;
@@ -88,16 +126,20 @@ export default function AdminLoginPage() {
             }`}
           >
             <i className="fa-solid fa-right-to-bracket mr-2"></i>
-            {loading ? "Loading..." : "Login"}
+            {loading ? (
+              <>
+                <span className="animate-pulse">Loading...</span>
+                <i className="fa-solid fa-spinner fa-spin ml-2"></i>
+              </>
+            ) : (
+              'Login'
+            )}
           </button>
 
           <div className="flex items-center justify-between text-xs">
             <Link to="/admin/forgot" className="text-gray-600 underline underline-offset-4">
               Lupa password?
             </Link>
-            {/* <Link to="/admin/register" className="text-gray-900 font-semibold underline underline-offset-4">
-              Register admin
-            </Link> */}
           </div>
         </form>
       </section>
