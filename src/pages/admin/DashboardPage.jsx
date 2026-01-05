@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useNavigate } from "react-router-dom";
+import * as XLSX from 'xlsx';
+import Swal from "sweetalert2";
 
 /* ===== CHART ===== */
 import {
@@ -13,13 +15,6 @@ import {
   Cell,
 } from "recharts";
 
-/* ===== CSV ===== */
-import Papa from "papaparse";
-import { saveAs } from "file-saver";
-
-/* ===== SWEETALERT ===== */
-import Swal from "sweetalert2";
-
 export default function DashboardPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -31,7 +26,7 @@ export default function DashboardPage() {
   const [role, setRole] = useState(null);
   const [moduleFilter, setModuleFilter] = useState("all");
 
-  /* ================= LOAD ROLE FROM admin_profiles ================= */
+  /* ================= LOAD ROLE ================= */
   useEffect(() => {
     async function loadRole() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -102,13 +97,13 @@ export default function DashboardPage() {
     if (role !== "super") return;
 
     const result = await Swal.fire({
-      title: 'Hapus Data',
-      text: "Apakah Anda yakin ingin menghapus pengajuan ini?",
+      title: 'Hapus Data?',
+      text: "Data yang dihapus tidak dapat dikembalikan!",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
       cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Ya, Hapus',
+      confirmButtonText: 'Ya, Hapus!',
       cancelButtonText: 'Batal',
     });
 
@@ -119,14 +114,14 @@ export default function DashboardPage() {
     if (error) {
       Swal.fire({
         icon: 'error',
-        title: 'Gagal',
+        title: 'Gagal!',
         text: 'Gagal menghapus data',
         timer: 2000,
       });
     } else {
       Swal.fire({
         icon: 'success',
-        title: 'Berhasil',
+        title: 'Berhasil!',
         text: 'Data berhasil dihapus',
         timer: 1500,
       });
@@ -134,8 +129,8 @@ export default function DashboardPage() {
     }
   };
 
-  /* ================= EXPORT CSV ================= */
-  const exportCSV = () => {
+  /* ================= EXPORT EXCEL ================= */
+  const exportExcel = () => {
     if (data.length === 0) {
       Swal.fire({
         icon: 'warning',
@@ -147,69 +142,108 @@ export default function DashboardPage() {
     }
 
     const exportData = data.map(item => ({
-      module_slug: item.module_slug || '',
-      title: item.title || '',
-      content: item.content || '',
-      sender_name: item.sender_name || '',
-      sender_contact: item.sender_contact || '',
-      tracking_code: item.tracking_code || '',
-      status: item.status || 'pending',
-      admin_reply: item.admin_reply || '',
-      created_at: new Date(item.created_at).toISOString(),
-      updated_at: new Date(item.updated_at || item.created_at).toISOString(),
+      "Module": item.module_slug || '',
+      "Judul": item.title || '',
+      "Konten": item.content || '',
+      "Nama Pengaju": item.sender_name || '',
+      "Kontak": item.sender_contact || '',
+      "Kode Tracking": item.tracking_code || '',
+      "Status": item.status || 'pending',
+      "Balasan Admin": item.admin_reply || '',
+      "Tanggal Buat": new Date(item.created_at).toLocaleDateString('id-ID'),
+      "Waktu Buat": new Date(item.created_at).toLocaleTimeString('id-ID'),
     }));
 
-    const csv = Papa.unparse(exportData);
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-    saveAs(blob, `submissions_${new Date().toISOString().split('T')[0]}.csv`);
+    // Buat worksheet
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    
+    // Buat workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data Pengajuan");
+    
+    // Styling header
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const address = XLSX.utils.encode_col(C) + "1";
+      if (!ws[address]) continue;
+      ws[address].s = {
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "2563eb" } }
+      };
+    }
+    
+    // Set column widths
+    const colWidths = [
+      { wch: 15 }, { wch: 30 }, { wch: 40 }, { wch: 20 },
+      { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 30 },
+      { wch: 15 }, { wch: 12 },
+    ];
+    ws['!cols'] = colWidths;
+
+    // Export ke file
+    XLSX.writeFile(wb, `pengajuan_${new Date().toISOString().split('T')[0]}.xlsx`);
     
     Swal.fire({
       icon: 'success',
-      title: 'Export Berhasil',
-      text: `File CSV berhasil diunduh (${data.length} data)`,
+      title: 'Export Berhasil!',
+      html: `
+        <div class="text-center">
+          <i class="fas fa-file-excel text-3xl text-green-500 mb-3"></i>
+          <p class="text-lg font-semibold">${data.length} data berhasil diexport</p>
+          <p class="text-sm text-gray-600">File Excel siap diunduh</p>
+        </div>
+      `,
       timer: 2000,
     });
   };
 
-  /* ================= IMPORT CSV ================= */
+  /* ================= IMPORT EXCEL ================= */
   const handleFileUpload = (event) => {
+    console.log("📁 File upload triggered", event.target.files);
+    
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+      console.log("❌ No file selected");
+      return;
+    }
 
     // Validasi file type
-    if (!file.name.endsWith('.csv')) {
+    const validExtensions = ['.xlsx', '.xls'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (!validExtensions.includes(fileExtension)) {
       Swal.fire({
         icon: 'error',
         title: 'Format File Salah',
-        text: 'Hanya file CSV yang diperbolehkan',
+        text: 'Hanya file Excel (.xlsx, .xls) yang diperbolehkan',
         timer: 2000,
       });
       return;
     }
 
-    // Validasi file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
+    // Validasi file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
       Swal.fire({
         icon: 'error',
         title: 'File Terlalu Besar',
-        text: 'Ukuran file maksimal 5MB',
+        text: 'Ukuran file maksimal 10MB',
         timer: 2000,
       });
       return;
     }
 
+    // Tampilkan preview dengan SweetAlert
     Swal.fire({
-      title: 'Import Data CSV',
+      title: 'Import Data Excel',
       html: `
         <div class="text-left">
-          <p class="mb-2"><i class="fas fa-file-csv text-blue-500 mr-2"></i>File: <strong>${file.name}</strong></p>
+          <p class="mb-2"><i class="fas fa-file-excel text-green-500 mr-2"></i>File: <strong>${file.name}</strong></p>
           <p class="mb-4"><i class="fas fa-weight-hanging text-gray-500 mr-2"></i>Ukuran: ${(file.size / 1024).toFixed(2)} KB</p>
           <div class="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-            <p class="font-semibold mb-2"><i class="fas fa-info-circle mr-2"></i>Pastikan format CSV sesuai:</p>
+            <p class="font-semibold mb-2"><i class="fas fa-info-circle mr-2"></i>Pastikan format Excel sesuai:</p>
             <ul class="ml-4 mt-1 space-y-1">
-              <li><i class="fas fa-check text-green-500 mr-2"></i>Kolom wajib: <code>title</code>, <code>content</code>, <code>sender_name</code></li>
-              <li><i class="fas fa-check text-green-500 mr-2"></i>Kolom opsional: <code>module_slug</code>, <code>sender_contact</code>, <code>tracking_code</code>, <code>status</code>, <code>admin_reply</code></li>
-              <li><i class="fas fa-check text-green-500 mr-2"></i>Status: pending, process, done</li>
+              <li><i class="fas fa-check text-green-500 mr-2"></i>Kolom wajib: <code>Judul</code>, <code>Konten</code>, <code>Nama Pengaju</code></li>
+              <li><i class="fas fa-check text-green-500 mr-2"></i>Status: pending/menunggu, process/diproses, done/selesai</li>
             </ul>
           </div>
         </div>
@@ -226,73 +260,31 @@ export default function DashboardPage() {
           reader.onload = async (e) => {
             try {
               setImporting(true);
-              const csvText = e.target.result;
+              const data = e.target.result;
               
-              // Parse CSV
-              Papa.parse(csvText, {
-                header: true,
-                skipEmptyLines: true,
-                complete: async (results) => {
-                  if (results.errors.length > 0) {
-                    reject(new Error('Format CSV tidak valid: ' + results.errors[0].message));
-                    return;
-                  }
+              // Parse Excel
+              const workbook = XLSX.read(data, { type: 'binary' });
+              
+              // Ambil sheet pertama
+              const firstSheet = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheet];
+              
+              // Convert ke JSON
+              const excelData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+              
+              console.log("📊 Excel data parsed:", excelData);
+              
+              if (excelData.length === 0) {
+                reject(new Error('File Excel kosong atau tidak memiliki data'));
+                return;
+              }
 
-                  const csvData = results.data;
-                  
-                  if (csvData.length === 0) {
-                    reject(new Error('File CSV kosong'));
-                    return;
-                  }
-
-                  // Validasi kolom minimal
-                  const requiredColumns = ['title', 'content', 'sender_name'];
-                  const firstRow = csvData[0];
-                  const missingColumns = requiredColumns.filter(col => !firstRow.hasOwnProperty(col));
-                  
-                  if (missingColumns.length > 0) {
-                    reject(new Error(`Kolom wajib tidak ditemukan: ${missingColumns.join(', ')}`));
-                    return;
-                  }
-
-                  // Validasi status jika ada
-                  const validStatuses = ['pending', 'process', 'done'];
-                  const invalidRows = csvData.filter(row => 
-                    row.status && !validStatuses.includes(row.status.toLowerCase())
-                  );
-                  
-                  if (invalidRows.length > 0) {
-                    reject(new Error(`${invalidRows.length} baris memiliki status tidak valid. Gunakan: pending, process, atau done`));
-                    return;
-                  }
-
-                  // Import ke database
-                  const { error } = await supabase
-                    .from('submissions')
-                    .insert(
-                      csvData.map(row => ({
-                        module_slug: row.module_slug || null,
-                        title: row.title || '',
-                        content: row.content || '',
-                        sender_name: row.sender_name || '',
-                        sender_contact: row.sender_contact || null,
-                        tracking_code: row.tracking_code || generateTrackingCode(),
-                        status: (row.status || 'pending').toLowerCase(),
-                        admin_reply: row.admin_reply || null,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                      }))
-                    );
-
-                  if (error) throw error;
-                  
-                  resolve(csvData.length);
-                },
-                error: (error) => {
-                  reject(new Error('Gagal membaca file CSV'));
-                }
-              });
+              // Process data
+              const result = await processExcelData(excelData);
+              resolve(result);
+              
             } catch (error) {
+              console.error('Import error:', error);
               reject(error);
             }
           };
@@ -301,7 +293,7 @@ export default function DashboardPage() {
             reject(new Error('Gagal membaca file'));
           };
 
-          reader.readAsText(file, 'UTF-8');
+          reader.readAsBinaryString(file);
         });
       },
       allowOutsideClick: () => !Swal.isLoading(),
@@ -317,7 +309,7 @@ export default function DashboardPage() {
                 <i class="fas fa-check text-2xl text-green-600"></i>
               </div>
               <p class="text-lg font-bold text-gray-800"><i class="fas fa-database mr-2"></i>${successCount} data berhasil diimport</p>
-              <p class="text-gray-600 mt-2"><i class="fas fa-sync-alt fa-spin mr-2"></i>Data akan ditampilkan dalam beberapa detik...</p>
+              <p class="text-gray-600 mt-2">Data akan ditampilkan dalam beberapa detik...</p>
             </div>
           `,
           timer: 2000,
@@ -345,7 +337,6 @@ export default function DashboardPage() {
               <ul class="ml-4 mt-1 text-sm space-y-1">
                 <li><i class="fas fa-download mr-2"></i>Download template untuk contoh format</li>
                 <li><i class="fas fa-columns mr-2"></i>Pastikan kolom sesuai dengan template</li>
-                <li><i class="fas fa-check-circle mr-2"></i>Status harus: pending, process, atau done</li>
               </ul>
             </div>
           </div>
@@ -357,6 +348,127 @@ export default function DashboardPage() {
     });
   };
 
+  /* ================= PROCESS EXCEL DATA ================= */
+  const processExcelData = async (excelData) => {
+    console.log("🔧 Processing Excel data:", excelData);
+    
+    if (excelData.length === 0) {
+      throw new Error('File Excel kosong');
+    }
+
+    // Cari mapping kolom (case insensitive)
+    const firstRow = excelData[0];
+    console.log("📋 First row:", firstRow);
+    
+    const columnMapping = {};
+    const columnNames = Object.keys(firstRow);
+    
+    // Map kolom berdasarkan nama (case insensitive)
+    columnNames.forEach(key => {
+      const lowerKey = key.toLowerCase().trim();
+      
+      if (lowerKey.includes('judul') || lowerKey.includes('title')) {
+        columnMapping.title = key;
+        console.log("✅ Mapped 'title' to:", key);
+      }
+      if (lowerKey.includes('konten') || lowerKey.includes('content') || lowerKey.includes('deskripsi')) {
+        columnMapping.content = key;
+        console.log("✅ Mapped 'content' to:", key);
+      }
+      if (lowerKey.includes('nama') || lowerKey.includes('sender') || lowerKey.includes('pengaju')) {
+        columnMapping.sender_name = key;
+        console.log("✅ Mapped 'sender_name' to:", key);
+      }
+      if (lowerKey.includes('module') || lowerKey.includes('modul') || lowerKey.includes('slug')) {
+        columnMapping.module_slug = key;
+        console.log("✅ Mapped 'module_slug' to:", key);
+      }
+      if (lowerKey.includes('kontak') || lowerKey.includes('contact')) {
+        columnMapping.sender_contact = key;
+        console.log("✅ Mapped 'sender_contact' to:", key);
+      }
+      if (lowerKey.includes('tracking') || lowerKey.includes('kode')) {
+        columnMapping.tracking_code = key;
+        console.log("✅ Mapped 'tracking_code' to:", key);
+      }
+      if (lowerKey.includes('status')) {
+        columnMapping.status = key;
+        console.log("✅ Mapped 'status' to:", key);
+      }
+      if (lowerKey.includes('balasan') || lowerKey.includes('reply') || lowerKey.includes('respon')) {
+        columnMapping.admin_reply = key;
+        console.log("✅ Mapped 'admin_reply' to:", key);
+      }
+    });
+
+    console.log("🗺️ Column mapping:", columnMapping);
+
+    // Validasi kolom minimal
+    if (!columnMapping.title || !columnMapping.content || !columnMapping.sender_name) {
+      const missing = [];
+      if (!columnMapping.title) missing.push('Judul/Title');
+      if (!columnMapping.content) missing.push('Konten/Content');
+      if (!columnMapping.sender_name) missing.push('Nama Pengaju/Sender Name');
+      throw new Error(`Kolom wajib tidak ditemukan: ${missing.join(', ')}`);
+    }
+
+    // Map status
+    const statusMap = {
+      'menunggu': 'pending',
+      'diproses': 'process',
+      'selesai': 'done',
+      'pending': 'pending',
+      'process': 'process',
+      'done': 'done'
+    };
+
+    // Prepare data untuk insert
+    const dataToInsert = excelData.map((row, index) => {
+      // Helper function untuk get value dengan default
+      const getValue = (column, defaultValue = '') => {
+        if (!column || !row[column]) return defaultValue;
+        return row[column].toString().trim();
+      };
+
+      const rowData = {
+        module_slug: getValue(columnMapping.module_slug, null),
+        title: getValue(columnMapping.title, ''),
+        content: getValue(columnMapping.content, ''),
+        sender_name: getValue(columnMapping.sender_name, ''),
+        sender_contact: getValue(columnMapping.sender_contact, null),
+        tracking_code: getValue(columnMapping.tracking_code, generateTrackingCode()),
+        admin_reply: getValue(columnMapping.admin_reply, null),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Handle status
+      if (columnMapping.status && row[columnMapping.status]) {
+        const statusValue = row[columnMapping.status].toString().toLowerCase().trim();
+        rowData.status = statusMap[statusValue] || 'pending';
+      } else {
+        rowData.status = 'pending';
+      }
+
+      console.log(`📝 Row ${index + 1}:`, rowData);
+      return rowData;
+    });
+
+    console.log("🚀 Data to insert:", dataToInsert);
+
+    // Import ke database
+    const { error } = await supabase
+      .from('submissions')
+      .insert(dataToInsert);
+
+    if (error) {
+      console.error('Database error:', error);
+      throw new Error('Gagal menyimpan data ke database: ' + error.message);
+    }
+    
+    return dataToInsert.length;
+  };
+
   /* ================= GENERATE TRACKING CODE ================= */
   const generateTrackingCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -364,46 +476,69 @@ export default function DashboardPage() {
     for (let i = 0; i < 8; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return code;
+    return `TRK${code}`;
   };
 
-  /* ================= DOWNLOAD TEMPLATE CSV ================= */
+  /* ================= DOWNLOAD TEMPLATE EXCEL ================= */
   const downloadTemplate = () => {
     const templateData = [
       {
-        module_slug: "keluhan",
-        title: "Contoh Pengajuan Keluhan",
-        content: "Deskripsi keluhan yang diajukan",
-        sender_name: "John Doe",
-        sender_contact: "john@example.com",
-        tracking_code: "TRK" + generateTrackingCode(),
-        status: "pending",
-        admin_reply: "",
+        "Module": "keluhan",
+        "Judul": "Contoh Pengajuan Keluhan",
+        "Konten": "Deskripsi keluhan yang diajukan",
+        "Nama Pengaju": "John Doe",
+        "Kontak": "john@example.com",
+        "Kode Tracking": "TRK123ABC",
+        "Status": "pending",
+        "Balasan Admin": "",
       },
       {
-        module_slug: "saran",
-        title: "Contoh Pengajuan Saran",
-        content: "Deskripsi saran untuk perbaikan",
-        sender_name: "Jane Smith",
-        sender_contact: "081234567890",
-        tracking_code: "TRK" + generateTrackingCode(),
-        status: "process",
-        admin_reply: "Saran sedang ditinjau",
+        "Module": "saran",
+        "Judul": "Contoh Pengajuan Saran",
+        "Konten": "Deskripsi saran untuk perbaikan",
+        "Nama Pengaju": "Jane Smith",
+        "Kontak": "081234567890",
+        "Kode Tracking": "TRK456DEF",
+        "Status": "process",
+        "Balasan Admin": "Saran sedang ditinjau",
       }
     ];
 
-    const csv = Papa.unparse(templateData);
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-    saveAs(blob, "template_import_submissions.csv");
+    // Buat worksheet
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    
+    // Buat workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    
+    // Header styling
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const address = XLSX.utils.encode_col(C) + "1";
+      if (!ws[address]) continue;
+      ws[address].s = {
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { fgColor: { rgb: "10B981" } }
+      };
+    }
+    
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 25 }, { wch: 35 }, { wch: 18 },
+      { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 25 }
+    ];
+
+    // Export ke file
+    XLSX.writeFile(wb, "template_import_pengajuan.xlsx");
     
     Swal.fire({
       icon: 'info',
       title: 'Template Downloaded',
       html: `
         <div class="text-center">
-          <i class="fas fa-file-download text-3xl text-blue-500 mb-3"></i>
-          <p>File template berhasil diunduh</p>
-          <p class="text-sm text-gray-600 mt-2">Gunakan file ini sebagai contoh format CSV</p>
+          <i class="fas fa-file-excel text-3xl text-blue-500 mb-3"></i>
+          <p>File template berhasil diunduh!</p>
+          <p class="text-sm text-gray-600 mt-2">Gunakan file ini sebagai contoh format Excel</p>
         </div>
       `,
       timer: 2000,
@@ -507,36 +642,36 @@ export default function DashboardPage() {
           </select>
 
           {/* File Upload Button */}
-          <label className="cursor-pointer">
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="hidden"
-              disabled={importing}
-            />
-            <button
-              disabled={importing}
-              className={`border border-gray-300 rounded-lg px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
-                importing 
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
-                  : "bg-white hover:bg-gray-50 text-gray-700"
-              }`}
-            >
-              {importing ? (
-                <>
-                  <i className="fas fa-spinner fa-spin"></i>
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-file-import text-blue-500"></i>
-                  Import CSV
-                </>
-              )}
-            </button>
-          </label>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className={`border border-gray-300 rounded-lg px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
+              importing 
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                : "bg-white hover:bg-gray-50 text-gray-700"
+            }`}
+          >
+            {importing ? (
+              <>
+                <i className="fas fa-spinner fa-spin"></i>
+                Importing...
+              </>
+            ) : (
+              <>
+                <i className="fas fa-file-import text-blue-500"></i>
+                Import Excel
+              </>
+            )}
+          </button>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            className="hidden"
+            disabled={importing}
+          />
 
           {/* Download Template */}
           <button
@@ -547,9 +682,9 @@ export default function DashboardPage() {
             Template
           </button>
 
-          {/* Export CSV */}
+          {/* Export Excel */}
           <button
-            onClick={exportCSV}
+            onClick={exportExcel}
             disabled={data.length === 0}
             className={`border rounded-lg px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
               data.length === 0
@@ -557,8 +692,8 @@ export default function DashboardPage() {
                 : "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
             }`}
           >
-            <i className="fas fa-file-export text-green-500"></i>
-            Export CSV
+            <i className="fas fa-file-excel text-green-500"></i>
+            Export Excel
           </button>
         </div>
       </div>
@@ -629,10 +764,7 @@ export default function DashboardPage() {
             </div>
             <p className="text-gray-500 font-medium">Belum ada pengajuan</p>
             <p className="text-sm text-gray-400 mt-1">
-              {status === 'all' && moduleFilter === 'all'
-                ? 'Mulai dengan mengimport data CSV atau tambah data manual'
-                : `Tidak ada data dengan filter "${moduleFilter !== 'all' ? 'Modul: ' + moduleFilter + ' ' : ''}${status !== 'all' ? 'Status: ' + status : ''}"`
-              }
+              Mulai dengan mengimport data Excel
             </p>
           </div>
         ) : (
@@ -662,43 +794,26 @@ export default function DashboardPage() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {data.map((d) => (
-                  <tr
-                    key={d.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
+                  <tr key={d.id} className="hover:bg-gray-50">
                     <td className="p-3">
                       <div 
-                        className="cursor-pointer group"
+                        className="cursor-pointer"
                         onClick={() => navigate(`/admin/submissions/${d.id}`)}
                       >
-                        <p className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                        <p className="font-medium text-gray-900 hover:text-blue-600">
                           <i className="fas fa-file-alt mr-2 text-gray-400"></i>
                           {d.title}
                         </p>
                         <p className="text-xs text-gray-500 truncate max-w-xs ml-6">
                           {d.content || 'Tidak ada konten'}
                         </p>
-                        {d.tracking_code && (
-                          <p className="text-xs text-gray-400 mt-1 ml-6">
-                            <i className="fas fa-barcode mr-1"></i>
-                            {d.tracking_code}
-                          </p>
-                        )}
                       </div>
                     </td>
                     <td className="p-3">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          <i className="fas fa-user mr-2 text-gray-400"></i>
-                          {d.sender_name}
-                        </p>
-                        {d.sender_contact && (
-                          <p className="text-xs text-gray-500 mt-1 ml-6">
-                            <i className="fas fa-phone mr-1"></i>
-                            {d.sender_contact}
-                          </p>
-                        )}
-                      </div>
+                      <p className="font-medium text-gray-900">
+                        <i className="fas fa-user mr-2 text-gray-400"></i>
+                        {d.sender_name}
+                      </p>
                     </td>
                     <td className="p-3">
                       <div className="flex items-center">
@@ -709,9 +824,7 @@ export default function DashboardPage() {
                       </div>
                     </td>
                     <td className="p-3">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium border ${badge[d.status]}`}
-                      >
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium border ${badge[d.status]}`}>
                         {d.status === 'pending' && <i className="fas fa-clock mr-1"></i>}
                         {d.status === 'process' && <i className="fas fa-spinner mr-1"></i>}
                         {d.status === 'done' && <i className="fas fa-check-circle mr-1"></i>}
@@ -719,30 +832,13 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="p-3 text-sm text-gray-600">
-                      <div>
-                        <div className="flex items-center">
-                          <i className="fas fa-calendar-day mr-2 text-gray-400"></i>
-                          {new Date(d.created_at).toLocaleDateString('id-ID', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          <i className="fas fa-clock mr-1"></i>
-                          {new Date(d.created_at).toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </div>
-                      </div>
+                      {new Date(d.created_at).toLocaleDateString('id-ID')}
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => navigate(`/admin/submissions/${d.id}`)}
-                          className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors border border-blue-200"
-                          title="Lihat Detail"
+                          className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-50"
                         >
                           <i className="fas fa-eye text-xs"></i>
                           Detail
@@ -750,8 +846,7 @@ export default function DashboardPage() {
                         {role === "super" && (
                           <button
                             onClick={() => remove(d.id)}
-                            className="text-red-600 hover:text-red-800 text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-200"
-                            title="Hapus Data"
+                            className="text-red-600 hover:text-red-800 text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-red-50"
                           >
                             <i className="fas fa-trash-alt text-xs"></i>
                             Hapus
@@ -768,62 +863,13 @@ export default function DashboardPage() {
       </div>
 
       {/* FOOTER INFO */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm text-gray-500">
-        <div>
-          <p>
-            <i className="fas fa-user-shield mr-2 text-blue-500"></i>
-            Role: <span className="font-bold text-gray-700">{role}</span> • 
-            <i className="fas fa-sync-alt ml-3 mr-2 text-green-500"></i>
-            Terakhir update: <span className="font-medium">{new Date().toLocaleTimeString('id-ID')}</span>
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <i className="fas fa-info-circle text-blue-500"></i>
-            <span>Import CSV maksimal 5MB</span>
-          </div>
-          <button
-            onClick={() => {
-              Swal.fire({
-                icon: 'info',
-                title: 'Format CSV untuk Import',
-                html: `
-                  <div class="text-left">
-                    <p class="mb-3 font-semibold"><i class="fas fa-file-csv mr-2"></i>Kolom yang wajib ada:</p>
-                    <ul class="space-y-1 ml-4">
-                      <li><i class="fas fa-asterisk text-red-500 mr-2"></i><code>title</code> - Judul pengajuan</li>
-                      <li><i class="fas fa-asterisk text-red-500 mr-2"></i><code>content</code> - Konten/deskripsi</li>
-                      <li><i class="fas fa-asterisk text-red-500 mr-2"></i><code>sender_name</code> - Nama pengaju</li>
-                    </ul>
-                    <p class="mt-4 mb-2 font-semibold"><i class="fas fa-plus-circle mr-2"></i>Kolom opsional:</p>
-                    <ul class="space-y-1 ml-4">
-                      <li><i class="fas fa-folder mr-2 text-gray-500"></i><code>module_slug</code> - Modul (keluhan/saran/dll)</li>
-                      <li><i class="fas fa-phone mr-2 text-gray-500"></i><code>sender_contact</code> - Kontak pengaju</li>
-                      <li><i class="fas fa-barcode mr-2 text-gray-500"></i><code>tracking_code</code> - Kode tracking</li>
-                      <li><i class="fas fa-flag mr-2 text-gray-500"></i><code>status</code> - pending/process/done</li>
-                      <li><i class="fas fa-reply mr-2 text-gray-500"></i><code>admin_reply</code> - Balasan admin</li>
-                    </ul>
-                    <div class="mt-4 p-3 bg-blue-50 rounded-lg">
-                      <p class="text-sm"><i class="fas fa-lightbulb mr-2"></i><strong>Tips:</strong></p>
-                      <ul class="ml-4 mt-1 text-sm space-y-1">
-                        <li><i class="fas fa-download mr-2"></i>Download template untuk contoh format</li>
-                        <li><i class="fas fa-check mr-2"></i>Status otomatis jadi "pending" jika kosong</li>
-                        <li><i class="fas fa-code mr-2"></i>Tracking code otomatis dibuat jika kosong</li>
-                      </ul>
-                    </div>
-                  </div>
-                `,
-                width: '600px',
-                confirmButtonText: 'Mengerti',
-                confirmButtonColor: '#3b82f6',
-              });
-            }}
-            className="text-blue-600 hover:text-blue-800 underline underline-offset-2 flex items-center gap-1"
-          >
-            <i className="fas fa-question-circle"></i>
-            Panduan Format CSV
-          </button>
-        </div>
+      <div className="text-sm text-gray-500">
+        <p>
+          <i className="fas fa-user-shield mr-2 text-blue-500"></i>
+          Role: <span className="font-bold">{role}</span> • 
+          <i className="fas fa-sync-alt ml-3 mr-2 text-green-500"></i>
+          Terakhir update: {new Date().toLocaleTimeString('id-ID')}
+        </p>
       </div>
     </div>
   );
